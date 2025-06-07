@@ -1,7 +1,10 @@
 import React from "react";
 import Button from "../components/ui/Button";
+import { useNavigate } from "react-router-dom";
 
 const Navbar = () => {
+  const navigate = useNavigate();
+
   return (
     <div className="flex items-center justify-between px-6 py-4 bg-navbar shadow-md font-[Poppins]">
       <div className="flex items-center gap-2">
@@ -9,7 +12,9 @@ const Navbar = () => {
         <span className="text-xl font-bold text-button">MomCare</span>
       </div>
       <div className="flex gap-4">
-        <Button variant="outline">Mom Login</Button>
+        <Button variant="outline" onClick={() => navigate("/login")}>
+          Mom Login
+        </Button>
         <Button>Doctor Login</Button>
       </div>
     </div>
