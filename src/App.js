@@ -4,6 +4,7 @@ import HomeScreen from "./screens/HomeScreen";
 import LoginPage from "./screens/LoginPage";
 import SignupPage from "./screens/SignupPage";
 import MomDashboard from "./screens/MomDashboard";
+import BookingPage from "./screens/BookingPage";
 import "./index.css";
 
 function App() {
@@ -14,6 +15,7 @@ function App() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/mom-dashboard" element={<MomDashboard />} />
+        <Route path="/book-appointment" element={<BookingPage />} />
       </Routes>
     </Router>
   );

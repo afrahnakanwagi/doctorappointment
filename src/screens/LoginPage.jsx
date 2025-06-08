@@ -19,7 +19,6 @@ export default function MomCareLogin() {
   const handleLogin = (e) => {
     e.preventDefault();
 
-    // Simulate login (you can later replace this with a real API call)
     if (email === 'mom@gmail.com' && password === 'password') {
       navigate('/mom-dashboard');
     } else {
