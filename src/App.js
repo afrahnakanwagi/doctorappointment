@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import HomeScreen from "./screens/HomeScreen";
 import LoginPage from "./screens/LoginPage";
 import SignupPage from "./screens/SignupPage";
+import MomDashboard from "./screens/MomDashboard";
 import "./index.css";
 
 function App() {
@@ -12,6 +13,7 @@ function App() {
         <Route path="/" element={<HomeScreen />} />
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
+        <Route path="/mom-dashboard" element={<MomDashboard />} />
       </Routes>
     </Router>
   );
