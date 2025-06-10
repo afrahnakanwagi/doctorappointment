@@ -108,7 +108,7 @@ export default function MomDashboard() {
 
                     {/* View Appointments Button */}
                     <div className="flex justify-center mt-10">
-                        <Button className="px-6 py-2 rounded-md">
+                        <Button className="px-6 py-2 rounded-md" onClick={() => navigate('/my-appointments')}>
                             View Your Appointments
                         </Button>
                     </div>
