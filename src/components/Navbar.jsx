@@ -15,7 +15,7 @@ const Navbar = () => {
         <Button variant="outline" onClick={() => navigate("/login")}>
           Mom Login
         </Button>
-        <Button>Doctor Login</Button>
+        <Button onClick={() => navigate("/login")}>Doctor Login</Button>
       </div>
     </div>
   );
