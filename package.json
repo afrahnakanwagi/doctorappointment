@@ -21,13 +21,10 @@
     "serve": "^14.2.4",
     "web-vitals": "^2.1.4"
   },
-"scripts": {
-  "start": "react-scripts start --host 0.0.0.0 --port $PORT",
-  "build": "react-scripts build",
-  "test": "react-scripts test",
-  "eject": "react-scripts eject",
-  "serve": "serve -s build -l $PORT"
-},
+  "scripts": {
+    "build": "react-scripts build",
+    "start": "serve -s build"
+  },
   "eslintConfig": {
     "extends": [
       "react-app",
@@ -47,9 +44,9 @@
     ]
   },
   "engines": {
-  "node": "18.x",
-  "npm": "9.x"
-},
+    "node": "18.x",
+    "npm": "9.x"
+  },
   "devDependencies": {
     "autoprefixer": "^10.4.21",
     "postcss": "^8.4.31",
