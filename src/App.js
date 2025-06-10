@@ -6,6 +6,7 @@ import SignupPage from "./screens/SignupPage";
 import MomDashboard from "./screens/MomDashboard";
 import BookingPage from "./screens/BookingPage";
 import MyAppointments from "./screens/MyAppointments";
+import DoctorDashboard from "./screens/DoctorDashboard";
 import "./index.css";
 
 function App() {
@@ -18,6 +19,7 @@ function App() {
         <Route path="/mom-dashboard" element={<MomDashboard />} />
         <Route path="/book-appointment" element={<BookingPage />} />
         <Route path="/my-appointments" element={<MyAppointments />} />
+        <Route path="/doctor-dashboard" element={<DoctorDashboard />} />
       </Routes>
     </Router>
   );
