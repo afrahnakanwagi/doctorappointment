@@ -28,8 +28,8 @@ const HomeScreen = () => {
                         Book appointments with doctors and midwives who understand your needs.
                     </p>
                     <div className="flex justify-center gap-4">
-                        <Button variant="outline" onClick={() => navigate("/login")}>I'm a Mom</Button>
-                        <Button onClick={() => navigate("/login")}>I'm a Healthy Provider</Button>
+                        <Button variant="outline" onClick={() => navigate("/login")}>I'm a Patient</Button>
+                        <Button onClick={() => navigate("/login")}>I'm a Healthcare Provider</Button>
                     </div>
                 </div>
             </div>

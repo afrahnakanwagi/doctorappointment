@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { 
   FaCalendarAlt, FaClock, FaUsers, FaCalendarCheck, 
@@ -11,6 +11,7 @@ import DatePicker from 'react-datepicker';
 import "react-datepicker/dist/react-datepicker.css";
 import Calendar from 'react-calendar';
 import 'react-calendar/dist/Calendar.css';
+import { useAuth } from "../context/AuthContext";
 
 const Button = ({ children, className = "", variant, ...props }) => {
   const base = "rounded-lg px-4 py-2 font-medium transition-all duration-200 flex items-center gap-2";
@@ -56,10 +57,11 @@ const DoctorDashboard = () => {
     end: null
   });
   const [availability, setAvailability] = useState({
-    days: [],
-    startTime: "09:00",
-    endTime: "17:00",
-    slotDuration: 30
+    day_of_week: "MON",
+    start_time: "09:00",
+    end_time: "17:00",
+    slot_duration: 30,
+    is_active: true
   });
   const [consultationFee, setConsultationFee] = useState({
     regular: 50000,
@@ -73,6 +75,7 @@ const DoctorDashboard = () => {
     { id: 2, message: "Appointment with Maria Garcia confirmed", time: "1 hour ago", read: false },
     { id: 3, message: "Follow-up reminder: Lisa Chen", time: "2 hours ago", read: true }
   ]);
+  const [doctorAvailability, setDoctorAvailability] = useState([]);
 
   const [appointments] = useState([
     {
@@ -128,6 +131,10 @@ const DoctorDashboard = () => {
       }
     }
   ]);
+
+  const { axiosInstance } = useAuth();
+
+  const { user } = useAuth();
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-UG', {
@@ -248,10 +255,28 @@ const DoctorDashboard = () => {
     }
   };
 
-  const handleAvailabilitySubmit = (e) => {
+  const handleAvailabilitySubmit = async (e) => {
     e.preventDefault();
-    showToast('success', '✅ Availability updated successfully!');
-    setShowAvailabilityModal(false);
+    try {
+      await axiosInstance.post(
+        "https://doctorappointmentbackend-e6hx.onrender.com/appointment/doctor/availability/",
+        {
+          ...availability,
+          start_time: `${availability.start_time}:00`,
+          end_time: `${availability.end_time}:00`
+        }
+      );
+      toast.success("Availability set successfully!");
+      setShowAvailabilityModal(false);
+      
+      const response = await axiosInstance.get(
+        "https://doctorappointmentbackend-e6hx.onrender.com/appointment/doctor/availability/"
+      );
+      setDoctorAvailability(response.data);
+    } catch (error) {
+      console.error("Error setting availability:", error);
+      toast.error(error.response?.data?.message || "Failed to set availability");
+    }
   };
 
   const handleFeeSubmit = (e) => {
@@ -324,6 +349,23 @@ const DoctorDashboard = () => {
     }
   }, [filteredAppointments, activeTab]);
 
+  // Add useEffect to fetch doctor's availability
+  useEffect(() => {
+    const fetchDoctorAvailability = async () => {
+      try {
+        const response = await axiosInstance.get(
+          "https://doctorappointmentbackend-e6hx.onrender.com/appointment/doctor/availability/"
+        );
+        setDoctorAvailability(response.data);
+      } catch (error) {
+        console.error("Error fetching doctor availability:", error);
+        toast.error("Failed to load schedule");
+      }
+    };
+
+    fetchDoctorAvailability();
+  }, [axiosInstance]);
+
   return (
     <div className="min-h-screen bg-background">
       {/* Sidebar */}
@@ -387,7 +429,7 @@ const DoctorDashboard = () => {
         <div className="p-6">
           {/* Welcome Section */}
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-button">Welcome Back, Dr. Afrah</h1>
+            <h1 className="text-3xl font-bold text-button">Welcome Back, Dr. {user?.username}</h1>
             <p className="text-gray-600 mt-2">Here's your appointment overview for today</p>
           </div>
 
@@ -721,9 +763,26 @@ const DoctorDashboard = () => {
                   <div className="border rounded-lg p-4">
                     <h3 className="font-semibold mb-2 text-button">Current Schedule</h3>
                     <div className="space-y-2 text-gray-600">
-                      <p>Monday - Friday: 9:00 AM - 5:00 PM</p>
-                      <p>Saturday: 9:00 AM - 1:00 PM</p>
-                      <p>Sunday: Closed</p>
+                      {doctorAvailability.length === 0 ? (
+                        <p>No schedule set</p>
+                      ) : (
+                        doctorAvailability.map((schedule) => (
+                          <div key={schedule.id} className="flex justify-between items-center">
+                            <div>
+                              <p className="font-medium">{schedule.day_of_week}</p>
+                              <p className="text-sm">
+                                {new Date(`2000-01-01T${schedule.start_time}`).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - 
+                                {new Date(`2000-01-01T${schedule.end_time}`).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </p>
+                            </div>
+                            <span className={`px-2 py-1 rounded-full text-xs ${
+                              schedule.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                            }`}>
+                              {schedule.is_active ? 'Active' : 'Inactive'}
+                            </span>
+                          </div>
+                        ))
+                      )}
                     </div>
                   </div>
                   <div className="border rounded-lg p-4">
@@ -886,93 +945,99 @@ const DoctorDashboard = () => {
       </Modal>
 
       {/* Availability Modal */}
-      {showAvailabilityModal && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <Card className="w-full max-w-2xl">
-            <CardContent>
-              <h2 className="text-xl font-semibold mb-4 text-button">Set Your Availability</h2>
-              <form onSubmit={handleAvailabilitySubmit} className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Available Days
-                  </label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map((day) => (
-                      <label key={day} className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          className="rounded text-button focus:ring-button"
-                          checked={availability.days.includes(day)}
-                          onChange={(e) => {
-                            const newDays = e.target.checked
-                              ? [...availability.days, day]
-                              : availability.days.filter(d => d !== day);
-                            setAvailability({ ...availability, days: newDays });
-                          }}
-                        />
-                        <span>{day}</span>
-                      </label>
-                    ))}
-                  </div>
-                </div>
+      <Modal isOpen={showAvailabilityModal} onClose={() => setShowAvailabilityModal(false)}>
+        <CardContent>
+          <h2 className="text-xl font-semibold mb-4 text-button">Set Availability</h2>
+          <form onSubmit={handleAvailabilitySubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Day of Week
+              </label>
+              <select
+                value={availability.day_of_week}
+                onChange={(e) => setAvailability({ ...availability, day_of_week: e.target.value })}
+                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-button focus:border-button"
+              >
+                <option value="MON">Monday</option>
+                <option value="TUE">Tuesday</option>
+                <option value="WED">Wednesday</option>
+                <option value="THU">Thursday</option>
+                <option value="FRI">Friday</option>
+                <option value="SAT">Saturday</option>
+                <option value="SUN">Sunday</option>
+              </select>
+            </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      Start Time
-                    </label>
-                    <input
-                      type="time"
-                      className="w-full rounded-lg border-gray-300 focus:border-button focus:ring-button"
-                      value={availability.startTime}
-                      onChange={(e) => setAvailability({ ...availability, startTime: e.target.value })}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-2">
-                      End Time
-                    </label>
-                    <input
-                      type="time"
-                      className="w-full rounded-lg border-gray-300 focus:border-button focus:ring-button"
-                      value={availability.endTime}
-                      onChange={(e) => setAvailability({ ...availability, endTime: e.target.value })}
-                    />
-                  </div>
-                </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Start Time
+              </label>
+              <input
+                type="time"
+                value={availability.start_time}
+                onChange={(e) => setAvailability({ ...availability, start_time: e.target.value })}
+                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-button focus:border-button"
+              />
+            </div>
 
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Appointment Duration (minutes)
-                  </label>
-                  <select
-                    className="w-full rounded-lg border-gray-300 focus:border-button focus:ring-button"
-                    value={availability.slotDuration}
-                    onChange={(e) => setAvailability({ ...availability, slotDuration: e.target.value })}
-                  >
-                    <option value="15">15 minutes</option>
-                    <option value="30">30 minutes</option>
-                    <option value="45">45 minutes</option>
-                    <option value="60">60 minutes</option>
-                  </select>
-                </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                End Time
+              </label>
+              <input
+                type="time"
+                value={availability.end_time}
+                onChange={(e) => setAvailability({ ...availability, end_time: e.target.value })}
+                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-button focus:border-button"
+              />
+            </div>
 
-                <div className="flex justify-end gap-4 mt-6">
-                  <Button
-                    variant="secondary"
-                    onClick={() => setShowAvailabilityModal(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button type="submit">
-                    Save Changes
-                  </Button>
-                </div>
-              </form>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Slot Duration (minutes)
+              </label>
+              <select
+                value={availability.slot_duration}
+                onChange={(e) => setAvailability({ ...availability, slot_duration: parseInt(e.target.value) })}
+                className="w-full p-2 border rounded-lg focus:ring-2 focus:ring-button focus:border-button"
+              >
+                <option value={15}>15 minutes</option>
+                <option value={30}>30 minutes</option>
+                <option value={45}>45 minutes</option>
+                <option value={60}>60 minutes</option>
+              </select>
+            </div>
+
+            <div className="flex items-center">
+              <input
+                type="checkbox"
+                checked={availability.is_active}
+                onChange={(e) => setAvailability({ ...availability, is_active: e.target.checked })}
+                className="h-4 w-4 text-button focus:ring-button border-gray-300 rounded"
+              />
+              <label className="ml-2 block text-sm text-gray-700">
+                Active
+              </label>
+            </div>
+
+            <div className="flex justify-end space-x-3 mt-6">
+              <button
+                type="button"
+                onClick={() => setShowAvailabilityModal(false)}
+                className="px-4 py-2 text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 bg-button text-white rounded-lg hover:bg-button/90"
+              >
+                Save Availability
+              </button>
+            </div>
+          </form>
+        </CardContent>
+      </Modal>
     </div>
   );
 };
