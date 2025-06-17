@@ -1,10 +1,10 @@
-import React, { useState, useMemo, useEffect } from "react";
+import React, { useState, useMemo, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { 
-  FaCalendarAlt, FaClock, FaUsers, FaCalendarCheck, 
-  FaMoneyBillWave, FaSearch, FaFilter, FaBell, 
-  FaCalendarWeek, FaUserFriends, FaCheckCircle, 
-  FaTimesCircle, FaBars, FaTimes 
+import {
+  FaCalendarAlt, FaClock, FaUsers, FaCalendarCheck,
+  FaMoneyBillWave, FaSearch, FaFilter, FaBell,
+  FaCalendarWeek, FaUserFriends, FaCheckCircle,
+  FaTimesCircle, FaBars, FaTimes, FaSpinner
 } from 'react-icons/fa';
 import { toast } from 'react-toastify';
 import DatePicker from 'react-datepicker';
@@ -39,9 +39,20 @@ const CardContent = ({ className = "", children }) => (
   <div className={`p-6 ${className}`}>{children}</div>
 );
 
-// Main Dashboard Component
+const Modal = ({ isOpen, onClose, children }) => {
+  if (!isOpen) return null;
+  return (
+    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+      <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl">
+        {children}
+      </div>
+    </div>
+  );
+};
+
 const DoctorDashboard = () => {
   const navigate = useNavigate();
+  const { user, axiosInstance } = useAuth();
   const [showSidebar, setShowSidebar] = useState(true);
   const [activeTab, setActiveTab] = useState('appointments');
   const [showAvailabilityModal, setShowAvailabilityModal] = useState(false);
@@ -76,65 +87,118 @@ const DoctorDashboard = () => {
     { id: 3, message: "Follow-up reminder: Lisa Chen", time: "2 hours ago", read: true }
   ]);
   const [doctorAvailability, setDoctorAvailability] = useState([]);
+  const [appointments, setAppointments] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const [appointments] = useState([
-    {
-      id: 1,
-      name: "Sarah Wilson",
-      type: "Routine Checkup",
-      date: "2024-03-20T10:00:00",
-      status: "PENDING",
-      details: {
-        age: 28,
-        reason: "Regular pregnancy checkup",
-        previousVisits: 3,
-        notes: "First trimester"
-      }
-    },
-    {
-      id: 2,
-      name: "Emily Brown",
-      type: "Prenatal Visit",
-      date: "2024-03-20T14:00:00",
-      status: "PENDING",
-      details: {
-        age: 32,
-        reason: "Follow-up consultation",
-        previousVisits: 5,
-        notes: "Third trimester"
-      }
-    },
-    {
-      id: 3,
-      name: "Maria Garcia",
-      type: "Follow-up",
-      date: "2024-03-21T09:00:00",
-      status: "CONFIRMED",
-      details: {
-        age: 30,
-        reason: "Post-delivery checkup",
-        previousVisits: 8,
-        notes: "2 weeks postpartum"
-      }
-    },
-    {
-      id: 4,
-      name: "Lisa Chen",
-      type: "Initial Consultation",
-      date: "2024-03-21T11:30:00",
-      status: "CONFIRMED",
-      details: {
-        age: 25,
-        reason: "First pregnancy consultation",
-        previousVisits: 0,
-        notes: "First visit"
-      }
-    }
-  ]);
+  const calculateAge = useCallback((dob) => {
+    const birthDate = new Date(dob);
+    const diff = Date.now() - birthDate.getTime();
+    const ageDate = new Date(diff);
+    return Math.abs(ageDate.getUTCFullYear() - 1970);
+  }, []);
 
-  const { axiosInstance } = useAuth();
+const fetchAppointments = useCallback(async () => {
+  try {
+    setLoading(true);
+    console.log("Fetching appointments...");
+    console.log("Current auth token:", localStorage.getItem('accessToken'));
+    
+    const config = {
+      headers: {
+        Authorization: `Bearer ${localStorage.getItem('accessToken')}`
+      }
+    };
+    console.log("Request config:", config);
 
-  const { user } = useAuth();
+    const response = await axiosInstance.get(
+      'https://doctorappointmentbackend-e6hx.onrender.com/appointment/appointments/',
+      config
+    );
+    console.log("API Response:", response);
+    console.log("Response data:", response.data);
+
+    const transformedAppointments = response.data.map(appointment => {
+      try {
+        console.log("Processing appointment:", appointment);
+        
+        let appointmentDate;
+        if (appointment.slot) {
+          const slotParts = appointment.slot.split(' on ');
+          if (slotParts.length > 1) {
+            const dateStr = slotParts[1].split(' with ')[0];
+            appointmentDate = new Date(dateStr);
+          }
+        }
+        
+        if (!appointmentDate || isNaN(appointmentDate.getTime())) {
+          appointmentDate = new Date(appointment.created_at);
+        }
+
+        if (isNaN(appointmentDate.getTime())) {
+          console.error("Invalid date for appointment:", appointment);
+          return null;
+        }
+
+        return {
+          id: appointment.id,
+          name: appointment.patient?.username || 'Unknown Patient',
+          type: appointment.appointment_type || 'Regular',
+          date: appointmentDate.toISOString(),
+          status: appointment.status || 'PENDING',
+          details: {
+            age: appointment.patient?.date_of_birth ? calculateAge(appointment.patient.date_of_birth) : 0,
+            reason: appointment.reason || '',
+            previousVisits: 0,
+            notes: appointment.notes || ''
+          },
+          rawData: appointment
+        };
+      } catch (transformError) {
+        console.error("Error transforming appointment:", transformError, appointment);
+        return null;
+      }
+    }).filter(Boolean);
+
+    console.log("Transformed appointments:", transformedAppointments);
+    setAppointments(transformedAppointments);
+    setError(null);
+  } catch (err) {
+    console.error("Fetch error:", err);
+    console.error("Error response:", err.response);
+    console.error("Error request:", err.request);
+    console.error("Error config:", err.config);
+    const errorMessage = err.response 
+      ? `Status: ${err.response.status}, Data: ${JSON.stringify(err.response.data)}`
+      : err.message;
+    setError(errorMessage);
+    toast.error(`Failed to fetch appointments: ${errorMessage}`);
+  } finally {
+    console.log("Fetch completed");
+    setLoading(false);
+    setRefreshing(false);
+  }
+}, [axiosInstance, calculateAge]);
+  useEffect(() => {
+    fetchAppointments();
+  }, [fetchAppointments]);
+
+  useEffect(() => {
+    const fetchDoctorAvailability = async () => {
+      try {
+        const response = await axiosInstance.get(
+          "https://doctorappointmentbackend-e6hx.onrender.com/appointment/doctor/availability/"
+        );
+        setDoctorAvailability(response.data);
+      } catch (error) {
+        console.error("Error fetching doctor availability:", error);
+        toast.error("Failed to load schedule");
+      }
+    };
+
+    fetchDoctorAvailability();
+  }, [axiosInstance]);
 
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-UG', {
@@ -145,28 +209,10 @@ const DoctorDashboard = () => {
     }).format(amount);
   };
 
-  const analyticsData = {
-    patientStats: {
-      total: 45,
-      new: 12,
-      returning: 33
-    },
-    appointmentStats: {
-      today: 5,
-      week: 25,
-      month: 98
-    },
-    revenueStats: {
-      today: 250000,
-      week: 1250000,
-      month: 4900000
-    }
-  };
-
   const filteredAppointments = useMemo(() => {
     return appointments.filter(appointment => {
       const matchesSearch = appointment.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                          appointment.type.toLowerCase().includes(searchQuery.toLowerCase());
+        appointment.type.toLowerCase().includes(searchQuery.toLowerCase());
       const matchesStatus = statusFilter === "all" || appointment.status === statusFilter;
       const appointmentDate = new Date(appointment.date);
       const today = new Date();
@@ -208,7 +254,76 @@ const DoctorDashboard = () => {
     });
   }, [filteredAppointments, selectedDate]);
 
-  const showToast = (type, message) => {
+  const filteredAppointmentsByTab = useMemo(() => {
+    switch (activeTab) {
+      case 'approved':
+        return filteredAppointments.filter(app => app.status === 'CONFIRMED');
+      case 'rejected':
+        return filteredAppointments.filter(app => app.status === 'REJECTED');
+      case 'appointments':
+      default:
+        return filteredAppointments;
+    }
+  }, [filteredAppointments, activeTab]);
+
+  const analyticsData = useMemo(() => ({
+    patientStats: {
+      total: [...new Set(appointments.map(a => a.rawData.patient.id))].length,
+      new: appointments.filter(a => a.details.previousVisits === 0).length,
+      returning: appointments.filter(a => a.details.previousVisits > 0).length
+    },
+    appointmentStats: {
+      today: filteredAppointments.filter(a =>
+        new Date(a.date).toDateString() === new Date().toDateString()
+      ).length,
+      week: filteredAppointments.filter(a =>
+        new Date(a.date) >= new Date(new Date().setDate(new Date().getDate() - 7))
+      ).length,
+      month: filteredAppointments.filter(a =>
+        new Date(a.date) >= new Date(new Date().getFullYear(), new Date().getMonth(), 1)
+      ).length
+    },
+    revenueStats: {
+      today: filteredAppointments.filter(a =>
+        new Date(a.date).toDateString() === new Date().toDateString() && a.status === 'CONFIRMED'
+      ).length * consultationFee.regular,
+      week: filteredAppointments.filter(a =>
+        new Date(a.date) >= new Date(new Date().setDate(new Date().getDate() - 7)) && a.status === 'CONFIRMED'
+      ).length * consultationFee.regular,
+      month: filteredAppointments.filter(a =>
+        new Date(a.date) >= new Date(new Date().getFullYear(), new Date().getMonth(), 1) && a.status === 'CONFIRMED'
+      ).length * consultationFee.regular
+    }
+  }), [appointments, filteredAppointments, consultationFee]);
+
+  const statsCards = useMemo(() => [
+    {
+      title: "Today's Appointments",
+      count: analyticsData.appointmentStats.today,
+      icon: <FaCalendarAlt className="text-2xl text-icon" />,
+      color: "bg-card"
+    },
+    {
+      title: "Pending Requests",
+      count: filteredAppointments.filter(a => a.status === 'PENDING').length,
+      icon: <FaClock className="text-2xl text-icon" />,
+      color: "bg-card"
+    },
+    {
+      title: "Total Patients",
+      count: analyticsData.patientStats.total,
+      icon: <FaUsers className="text-2xl text-icon" />,
+      color: "bg-card"
+    },
+    {
+      title: "Available Slots",
+      count: doctorAvailability.filter(a => a.is_active).length,
+      icon: <FaCalendarCheck className="text-2xl text-icon" />,
+      color: "bg-card"
+    }
+  ], [analyticsData, filteredAppointments, doctorAvailability]);
+
+  const showToast = useCallback((type, message) => {
     const options = {
       position: "top-right",
       autoClose: 3000,
@@ -253,7 +368,7 @@ const DoctorDashboard = () => {
       default:
         toast(message, options);
     }
-  };
+  }, []);
 
   const handleAvailabilitySubmit = async (e) => {
     e.preventDefault();
@@ -266,16 +381,16 @@ const DoctorDashboard = () => {
           end_time: `${availability.end_time}:00`
         }
       );
-      toast.success("Availability set successfully!");
+      showToast('success', "Availability set successfully!");
       setShowAvailabilityModal(false);
-      
+
       const response = await axiosInstance.get(
         "https://doctorappointmentbackend-e6hx.onrender.com/appointment/doctor/availability/"
       );
       setDoctorAvailability(response.data);
     } catch (error) {
       console.error("Error setting availability:", error);
-      toast.error(error.response?.data?.message || "Failed to set availability");
+      showToast('error', error.response?.data?.message || "Failed to set availability");
     }
   };
 
@@ -293,14 +408,33 @@ const DoctorDashboard = () => {
     });
   };
 
-  const confirmAction = () => {
+  const confirmAction = async () => {
     const { action, appointment } = showConfirmModal;
-    if (action === 'accept') {
-      showToast('success', `✅ Patient ${appointment.name} has been accepted successfully!`);
-    } else {
-      showToast('error', `❌ Patient ${appointment.name} has been rejected.`);
+    try {
+      const status = action === 'accept' ? 'CONFIRMED' : 'REJECTED';
+      const response = await axiosInstance.patch(
+        `https://doctorappointmentbackend-e6hx.onrender.com/appointment/appointments/${appointment.id}/status/`,
+        { status }
+      );
+
+      if (response.status === 200) {
+        // Update the local state immediately
+        setAppointments(prevAppointments => 
+          prevAppointments.map(apt => 
+            apt.id === appointment.id 
+              ? { ...apt, status: status }
+              : apt
+          )
+        );
+        
+        showToast('success', `✅ Patient ${appointment.name} has been ${action === 'accept' ? 'accepted' : 'rejected'} successfully!`);
+      }
+    } catch (error) {
+      console.error(`Error ${action}ing appointment:`, error);
+      showToast('error', `Failed to ${action} appointment: ${error.response?.data?.message || error.message}`);
+    } finally {
+      setShowConfirmModal({ show: false, action: null, appointment: null });
     }
-    setShowConfirmModal({ show: false, action: null, appointment: null });
   };
 
   const handleModalClose = () => {
@@ -311,24 +445,10 @@ const DoctorDashboard = () => {
     setShowConfirmModal({ show: false, action: null, appointment: null });
   };
 
-  const Modal = ({ isOpen, onClose, children }) => {
-    if (!isOpen) return null;
-    return (
-      <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-        <div className="bg-white rounded-xl shadow-xl w-full max-w-2xl">
-          {children}
-        </div>
-      </div>
-    );
-  };
-
-  const markNotificationAsRead = (id) => {
-    setNotifications(notifications.map(notif => 
-      notif.id === id ? { ...notif, read: true } : notif
-    ));
-  };
-
-  const unreadNotifications = notifications.filter(n => !n.read).length;
+  const refreshAppointments = useCallback(() => {
+    setRefreshing(true);
+    fetchAppointments();
+  }, [fetchAppointments]);
 
   const sidebarItems = [
     { id: 'patients', label: 'Patients', icon: <FaUserFriends /> },
@@ -337,34 +457,38 @@ const DoctorDashboard = () => {
     { id: 'rejected', label: 'Rejected', icon: <FaTimesCircle /> },
   ];
 
-  const filteredAppointmentsByTab = useMemo(() => {
-    switch (activeTab) {
-      case 'approved':
-        return filteredAppointments.filter(app => app.status === 'CONFIRMED');
-      case 'rejected':
-        return filteredAppointments.filter(app => app.status === 'REJECTED');
-      case 'appointments':
-      default:
-        return filteredAppointments;
-    }
-  }, [filteredAppointments, activeTab]);
+  const unreadNotifications = notifications.filter(n => !n.read).length;
 
-  // Add useEffect to fetch doctor's availability
-  useEffect(() => {
-    const fetchDoctorAvailability = async () => {
-      try {
-        const response = await axiosInstance.get(
-          "https://doctorappointmentbackend-e6hx.onrender.com/appointment/doctor/availability/"
-        );
-        setDoctorAvailability(response.data);
-      } catch (error) {
-        console.error("Error fetching doctor availability:", error);
-        toast.error("Failed to load schedule");
-      }
-    };
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-button mx-auto mb-4">
+            <FaSpinner className="inline-block text-2xl" />
+          </div>
+          <p>Loading appointments...</p>
+        </div>
+      </div>
+    );
+  }
 
-    fetchDoctorAvailability();
-  }, [axiosInstance]);
+  if (error) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center text-red-500">
+          <FaTimesCircle className="text-4xl mx-auto mb-4" />
+          <p>Error loading appointments: {error}</p>
+          <Button
+            variant="primary"
+            className="mt-4"
+            onClick={refreshAppointments}
+          >
+            Try Again
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background">
@@ -373,24 +497,23 @@ const DoctorDashboard = () => {
         <div className="p-4">
           <div className="flex items-center justify-between mb-8">
             <h2 className="text-xl font-bold text-button">Doctor Portal</h2>
-            <button 
+            <button
               onClick={() => setShowSidebar(false)}
               className="text-button hover:text-icon"
             >
               <FaTimes />
             </button>
           </div>
-          
+
           <nav className="space-y-2">
             {sidebarItems.map((item) => (
               <button
                 key={item.id}
                 onClick={() => setActiveTab(item.id)}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${
-                  activeTab === item.id 
-                    ? 'bg-button text-white' 
-                    : 'text-button hover:bg-button/10'
-                }`}
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-colors ${activeTab === item.id
+                  ? 'bg-button text-white'
+                  : 'text-button hover:bg-button/10'
+                  }`}
               >
                 <span className="text-lg">{item.icon}</span>
                 <span>{item.label}</span>
@@ -405,17 +528,32 @@ const DoctorDashboard = () => {
         {/* Top Navigation */}
         <nav className="bg-navbar shadow-md p-4">
           <div className="flex items-center justify-between">
-            <button 
+            <button
               onClick={() => setShowSidebar(!showSidebar)}
               className="text-button hover:text-icon"
             >
               <FaBars />
             </button>
             <div className="flex items-center space-x-4">
-              <button className="text-button hover:text-icon">
-                <FaBell />
+              <button
+                className="text-button hover:text-icon relative"
+                onClick={refreshAppointments}
+                disabled={refreshing}
+              >
+                {refreshing ? (
+                  <FaSpinner className="animate-spin" />
+                ) : (
+                  <>
+                    <FaBell />
+                    {unreadNotifications > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs rounded-full h-5 w-5 flex items-center justify-center">
+                        {unreadNotifications}
+                      </span>
+                    )}
+                  </>
+                )}
               </button>
-              <button 
+              <button
                 onClick={() => navigate('/')}
                 className="text-button hover:text-icon"
               >
@@ -614,12 +752,7 @@ const DoctorDashboard = () => {
 
           {/* Stats Cards */}
           <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
-            {[
-              { title: "Today's Appointments", count: 5, icon: <FaCalendarAlt className="text-2xl text-icon" />, color: "bg-card" },
-              { title: "Pending Requests", count: 3, icon: <FaClock className="text-2xl text-icon" />, color: "bg-card" },
-              { title: "Total Patients", count: 45, icon: <FaUsers className="text-2xl text-icon" />, color: "bg-card" },
-              { title: "Available Slots", count: 12, icon: <FaCalendarCheck className="text-2xl text-icon" />, color: "bg-card" }
-            ].map((stat, idx) => (
+            {statsCards.map((stat, idx) => (
               <Card key={idx}>
                 <CardContent>
                   <div className="flex items-center justify-between">
@@ -643,9 +776,9 @@ const DoctorDashboard = () => {
                 <CardContent>
                   <h2 className="text-xl font-semibold mb-4 text-button">
                     {activeTab === 'patients' ? 'Patients' :
-                     activeTab === 'approved' ? 'Approved Appointments' :
-                     activeTab === 'rejected' ? 'Rejected Appointments' :
-                     'All Appointments'}
+                      activeTab === 'approved' ? 'Approved Appointments' :
+                        activeTab === 'rejected' ? 'Rejected Appointments' :
+                          'All Appointments'}
                   </h2>
                   <div className="space-y-4">
                     {filteredAppointmentsByTab.length === 0 ? (
@@ -665,11 +798,10 @@ const DoctorDashboard = () => {
                                 <Button variant="danger" className="text-sm py-1" onClick={(e) => { e.stopPropagation(); handleAppointmentAction('reject', appt); }}>Reject</Button>
                               </div>
                             )}
-                            <span className={`px-3 py-1 rounded-full text-sm ${
-                              appt.status === 'CONFIRMED' ? 'bg-green-100 text-green-700' :
+                            <span className={`px-3 py-1 rounded-full text-sm ${appt.status === 'CONFIRMED' ? 'bg-green-100 text-green-700' :
                               appt.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
-                              'bg-red-100 text-red-700'
-                            }`}>
+                                'bg-red-100 text-red-700'
+                              }`}>
                               {appt.status}
                             </span>
                           </div>
@@ -726,11 +858,10 @@ const DoctorDashboard = () => {
                                   {new Date(appt.date).toLocaleTimeString()}
                                 </p>
                               </div>
-                              <span className={`px-3 py-1 rounded-full text-sm ${
-                                appt.status === 'CONFIRMED' ? 'bg-green-100 text-green-700' :
+                              <span className={`px-3 py-1 rounded-full text-sm ${appt.status === 'CONFIRMED' ? 'bg-green-100 text-green-700' :
                                 appt.status === 'PENDING' ? 'bg-yellow-100 text-yellow-700' :
-                                'bg-red-100 text-red-700'
-                              }`}>
+                                  'bg-red-100 text-red-700'
+                                }`}>
                                 {appt.status}
                               </span>
                             </div>
@@ -771,13 +902,12 @@ const DoctorDashboard = () => {
                             <div>
                               <p className="font-medium">{schedule.day_of_week}</p>
                               <p className="text-sm">
-                                {new Date(`2000-01-01T${schedule.start_time}`).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} - 
+                                {new Date(`2000-01-01T${schedule.start_time}`).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} -
                                 {new Date(`2000-01-01T${schedule.end_time}`).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                               </p>
                             </div>
-                            <span className={`px-2 py-1 rounded-full text-xs ${
-                              schedule.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
-                            }`}>
+                            <span className={`px-2 py-1 rounded-full text-xs ${schedule.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                              }`}>
                               {schedule.is_active ? 'Active' : 'Inactive'}
                             </span>
                           </div>
@@ -812,8 +942,8 @@ const DoctorDashboard = () => {
           </h2>
           <div className="mb-6">
             <p className="text-gray-600 mb-2">
-              {showConfirmModal.action === 'accept' 
-                ? 'Are you sure you want to accept this appointment?' 
+              {showConfirmModal.action === 'accept'
+                ? 'Are you sure you want to accept this appointment?'
                 : 'Are you sure you want to reject this appointment?'}
             </p>
             <div className="bg-card p-4 rounded-lg">
@@ -826,7 +956,7 @@ const DoctorDashboard = () => {
             <Button variant="secondary" onClick={handleModalClose}>
               Cancel
             </Button>
-            <Button 
+            <Button
               variant={showConfirmModal.action === 'accept' ? 'success' : 'danger'}
               onClick={confirmAction}
             >
