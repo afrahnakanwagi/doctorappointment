@@ -18,7 +18,6 @@ export const AuthProvider = ({ children }) => {
   const [axiosInstance] = useState(() => {
     const instance = axios.create();
     
-    // Request interceptor
     instance.interceptors.request.use(
       (config) => {
         const currentToken = localStorage.getItem('accessToken');
@@ -32,13 +31,11 @@ export const AuthProvider = ({ children }) => {
       }
     );
 
-    // Response interceptor
     instance.interceptors.response.use(
       (response) => response,
       async (error) => {
         const originalRequest = error.config;
 
-        // If error is 401 and we haven't tried to refresh token yet
         if (error.response?.status === 401 && !originalRequest._retry) {
           originalRequest._retry = true;
 
@@ -83,7 +80,6 @@ export const AuthProvider = ({ children }) => {
   }, []);
 
   useEffect(() => {
-    // Update token and user when localStorage changes
     const handleStorageChange = () => {
       setToken(localStorage.getItem('accessToken'));
       setUser(JSON.parse(localStorage.getItem('user')));
@@ -103,6 +99,7 @@ export const AuthProvider = ({ children }) => {
 
   const value = {
     token,
+    accessToken: token,
     user,
     isLoading,
     axiosInstance,
@@ -118,7 +115,7 @@ export const AuthProvider = ({ children }) => {
   };
 
   if (isLoading) {
-    return <div>Loading...</div>; // Or your loading component
+    return <div>Loading...</div>;
   }
 
   return (
