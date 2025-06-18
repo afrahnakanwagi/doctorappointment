@@ -25,7 +25,6 @@ export default function MyAppointments() {
       const transformedAppointments = response.data.map(appointment => {
         try {
           let appointmentDate;
-          // Parse the slot string format: "Slot on 2025-06-20 at 11:00:00 with Dr. Julian Namukwaya"
           if (appointment.slot) {
             const dateTimeMatch = appointment.slot.match(/(\d{4}-\d{2}-\d{2}) at (\d{2}:\d{2}:\d{2})/);
             if (dateTimeMatch) {
@@ -109,7 +108,6 @@ export default function MyAppointments() {
       );
 
       if (response.status === 200) {
-        // Update the local state immediately
         setAppointments(prevAppointments => 
           prevAppointments.map(apt => 
             apt.id === appointment.id 

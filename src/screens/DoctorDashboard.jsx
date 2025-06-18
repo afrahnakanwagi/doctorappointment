@@ -418,7 +418,6 @@ const fetchAppointments = useCallback(async () => {
       );
 
       if (response.status === 200) {
-        // Update the local state immediately
         setAppointments(prevAppointments => 
           prevAppointments.map(apt => 
             apt.id === appointment.id 

@@ -9,7 +9,7 @@ const Navbar = () => {
     <div className="w-full flex items-center justify-between px-6 py-4 bg-navbar shadow-md font-[Poppins]">
       <div className="flex items-center gap-2">
         <div className="text-icon text-3xl">❤️</div>
-        <span className="text-xl font-bold text-button">LifeCare</span>
+        <span className="text-xl font-bold text-button">Doctor Appointment Scheduler</span>
       </div>
       <div className="flex gap-4">
         <Button variant="outline" onClick={() => navigate("/login")}>
